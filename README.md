@@ -33,10 +33,10 @@ The labelled data size was augmented with another dataset UCFCrime2Local, which 
 To address the lack of inductive bias of transformer, random cropping/rotation was used during training.
 In general, the SGD optimizer was found to converge to more optimal solutions than Adam or RMSProp etc., for training the transformer encoder (temporal segment).
 
-|                               | AUC/Accuracy (float32) | AUC/Accuracy (int8) | AUC/Accuracy (TPU) | N-sequence latency (ms) |
-|-------------------------------|------------------------|---------------------|--------------------|-------------------------|
-| ResNet50 + Bidirectional LSTM | 0.8564/0.8508          |                     | Not supported      |                         |
-| MobileNetv2 + Transformer     | 0.8745/0.8527          | 0.8429/0.8301       | Same               | <60ms                   |
-| Proposed model                |                        |                     |                    |                         |
+|                               | AUC/Accuracy (float32) | AUC/Accuracy (int8) | AUC/Accuracy (TPU) | 1-sequence latency (ms) | Parameters (M) |
+|-------------------------------|------------------------|---------------------|--------------------|-------------------------|----------------|
+| ResNet50 + Bidirectional LSTM | 0.8564/0.8508          |                     | Not supported      |                         | 25             |
+| EfficientNet v2 + Transformer | 0.8745/0.8527          | 0.8429/0.8301       | Same               | <60ms                   | 8.1+2.2        |
+| DeiT-T + Transformer          | 0.877                  | 0.850               | Same               |                         | 5.5+1.3        |
 
-_N-Sequence latency is defined as the time taken for a single forward pass of image through the entire spatio-temporal network_
+_1-sequence latency is defined as the time taken for a single forward pass of image through the entire spatio-temporal network_
