@@ -10,7 +10,7 @@ import time
 # Set up your model paths
 VIT_MODEL_PATH = "quantized_spatial_extractor.tflite"
 CLS_MODEL_PATH = "quantized_temporal_extractor.tflite"
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 OUT_DIR = PROJ_DIR + r"\vit15train1"
 DATASET_DIR = PROJ_DIR + r'\ucf_dataset_proc'
 NUMPY_ARRAY_DIR = PROJ_DIR + r'\npy_data_output_15'

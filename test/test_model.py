@@ -15,7 +15,7 @@ tf.random.set_seed(42)  # tensorflow seed fixing
 # Set up your model paths
 VIT_MODEL_PATH = "spatial_extractor.h5"
 CLS_MODEL_PATH = "cls.h5"
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 
 DATASET_DIR = PROJ_DIR + r'\ucf_dataset_proc'
 NUMPY_ARRAY_DIR = PROJ_DIR + r'\npy_data_output_15'

@@ -1,4 +1,4 @@
-# Violence Detection
+# Vision Transformers for Violence Detection on the Edge
 
 This project uses Vision Transformers (ViT) as backbone networks for video violence detection on the edge.<br>
 <br>
