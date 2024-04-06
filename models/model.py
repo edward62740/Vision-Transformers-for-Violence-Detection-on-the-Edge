@@ -8,10 +8,10 @@ import random
 
 import keras_cv_attention_models
 import numpy as np
-
+import keras_nlp
 import tensorflow as tf
 import tensorflow_model_optimization as tfmot
-
+# import deit
 from matplotlib import pyplot as plt
 from tensorflow import keras
 from keras import regularizers
@@ -28,8 +28,8 @@ from scipy import signal
 from keras.models import load_model
 from keras_cv_attention_models import efficientvit_b, mobilevit, common_layers
 import os
-import tensorflow_hub as hub
 
+from tensorflow_model_optimization.python.core.quantization.keras.quantizers import LastValueQuantizer
 
 PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
 
@@ -115,9 +115,6 @@ def SpatialExtractorTest() -> keras.Model:
     return model
 
 
-
-
-
 def validate(layer):
     # print(layer_type)
     if hasattr(layer, 'activation'):
@@ -141,6 +138,7 @@ def modify_layers(layer):
             return layer
     return layer
 
+
 def flatten_model(model):
     if not any(hasattr(layer, 'layers') for layer in model.layers):
         return model  # No sub-model defined within this model
@@ -160,32 +158,203 @@ def flatten_model(model):
 
     return flat_model
 
+
+def gelu_approximation(x):
+    return tf.keras.activations.gelu(x, approximate=True)
+
+
+class GeluApproxLayer(keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(GeluApproxLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        super(GeluApproxLayer, self).build(input_shape)
+
+    def call(self, inputs):
+        return 0.5 * inputs * (1.0 + tf.tanh(np.sqrt(2 / np.pi) * (inputs + 0.044715 * tf.pow(inputs, 3))))
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+
+def SpatialExtractorDeit2():
+    model = deit.deit_tiny_distilled_patch16_224(pretrained=True)
+    return model
+
+
 def SpatialExtractorDeiT() -> keras.Model:
     # vit = hub.KerasLayer(model_gcs_path, trainable=False)
+
     vit = keras.models.load_model("deit_tiny_distilled_patch16_224_fe")
-    vit.trainable = False
+
+    dummy_inputs = tf.ones((1, 224, 224, 3))
+    _ = vit(dummy_inputs)
+
+    vit.build(input_shape=(1, 224, 224, 3))
+    vit.summary()
+    ''''''
+    copy_layers = []
+    for index, layer in enumerate(vit.layers):
+
+        if not hasattr(layer, 'layers'):
+            copy_layers.append(layer)
+            print(layer.get_weights())
+            print(layer)
+            continue
+
+        for sublayer in vit.layers[index].layers:
+            print(sublayer)
+            if hasattr(sublayer, 'activation') and sublayer.activation.__name__ == 'gelu':
+                print(sublayer.activation)
+                print("replaced activation")
+                # replace with approx
+                sublayer.activation = gelu_approximation
+                print(sublayer.activation)
+            if isinstance(sublayer, keras.layers.Dense):
+                print(sublayer.get_weights())
+            # insert layer
+
+        layer.save("deittmp/deit_tiny_distilled_patch16_224_fe_GELUapprox" + str(index))
+        vit.layers[index] = keras.models.load_model(
+            "deittmp/deit_tiny_distilled_patch16_224_fe_GELUapprox" + str(index))
+
+    # return model
+    # reconstruct the model as functional (keras)
+    inputs = keras.layers.Input(shape=(224, 224, 3))
+    x, outputs = None, None
+    dist = None
+
+    subfolder_list = [subfolder for subfolder in os.listdir("deittmp") if
+                      os.path.isdir(os.path.join("deittmp", subfolder))]
+
+    subfolder_list.sort(key=lambda a: int(a.split("GELUapprox")[-1]))
+    for index, subfolder in enumerate(subfolder_list):
+        subfolder_path = os.path.join("deittmp", subfolder)
+
+        if os.path.exists(subfolder_path):
+            model = keras.models.load_model(subfolder_path)
+            model.summary()
+            print(model)
+            if index == 0:
+                x = model(inputs)
+                x = keras.layers.ZeroPadding1D(padding=(1, 1))(x)
+            else:
+                x = model(x)[0]
+
+            # Or perform some other operations on the model
+        else:
+            print(f"Model in subfolder {subfolder} does not exist in the specified path: {subfolder_path}")
+
+    '''
+    for index, layer in enumerate(vit.layers):
+
+        if hasattr(layer, 'layers'):
+            model = keras.models.load_model("deittmp/deit_tiny_distilled_patch16_224_fe_GELUapprox" + str(index))
+
+            model.summary()
+            print(model)
+            if index == 0:
+                x = model(inputs)
+                x = keras.layers.ZeroPadding1D(padding=(1, 1))(x)
+            else:
+                x = model(x)[0]
+            # model = model_surgery.prepare_for_tflite(model)
+        
+        else:
+
+            print(layer)
+
+            if layer.name == "distillation_head":
+
+                continue
+
+            if layer.name == "classification_head":
+                #insert stride slice
+                # Define the indices for strided slice
+                begin_indices = [0, 0, 0]  # Start from the beginning of the first and third dimensions
+                end_indices = [1, 1, 768]  # Include the entire first and third dimensions
+                strides = [1, 1, 1]  # Stride of 2 for the second dimension
+
+                # Create a Lambda layer with the strided slice operation
+                x = keras.layers.Lambda(lambda a: tf.strided_slice(
+                    a,
+                    begin_indices,
+                    end_indices,
+                    strides=strides
+                ), name="strided_slice")(x)
+
+            config = layer.get_config()
+            weights = layer.get_weights()
+            cloned_layer = type(layer).from_config(config)
+
+            try:
+                cloned_layer.build(cloned_layer.input_shape)
+                cloned_layer.set_weights(weights)
+                print("loading weights")
+            except:
+                pass
+            x = cloned_layer(x)
+            if isinstance(layer, keras.layers.Dense):
+                # print number of units
+                print(layer.units)
+            print(cloned_layer.input.shape)
+            print(cloned_layer.output.shape)
+            print("failed to load model")
+
+        print(model.inputs)
+        print(model.outputs)
+        
+        '''
+    for l in copy_layers:
+        if l.name == "distillation_head":
+            continue
+        if l.name == "classification_head":
+
+            x1 = keras.layers.Lambda(lambda a: tf.strided_slice(
+                a,
+                [0, 1, 0],
+                [1, 2, 768],
+                strides=[1, 1, 1]
+            ), name="strided_slice")(x)
+            x2 = keras.layers.Lambda(lambda a: tf.strided_slice(
+                a,
+                [0, 0, 0],
+                [1, 1, 768],
+                strides=[1, 1, 1]
+            ), name="strided_slice1")(x)
+            # get layer in l for which l.name == "distillation_head"
+            distillation_head_layer = None
+            for layer in copy_layers:
+                if layer.name == "distillation_head":
+                    distillation_head_layer = layer
+                    break
+            x1 = distillation_head_layer(x1)
+            x2 = l(x2)
+            # add
+            x = keras.layers.Add()([x1, x2])
+            continue
+
+        x = l(x)
+
+    outputs = x
+    vit = keras.models.Model(inputs=inputs, outputs=outputs)
+
+    vit.build(input_shape=(None, 224, 224, 3))
     vit.summary()
 
-    vit = flatten_model(vit)
-
-    mm = keras.models.Model(inputs=vit.input, outputs=vit.output)
-    newvit = tf.keras.models.clone_model(
-                mm,
-                clone_function=modify_layers,
-            )
-
-    newvit.build(input_shape=(None, 224, 224, 3))
-    newvit.summary()
-    newvit.compile(loss="categorical_crossentropy")
-
-    # vit = keras.models.load_model("deit_tiny_distilled_patch16_224")
-    # vit = model_surgery.convert_gelu_to_approximate(vit)
     inp = keras.layers.Input(shape=(224, 224, 3))
-    x = keras.layers.experimental.preprocessing.Rescaling(1. / 255, input_shape=input_shape)(inp)
-    x = PreprocessTFLayer()(x)
+    # x = keras.layers.experimental.preprocessing.Rescaling(1. / 255, input_shape=input_shape)(inp)
+    # x = PreprocessTFLayer()(x)
+    x = keras.layers.Normalization(mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
+                                   variance=[(0.229 * 255) ** 2, (0.224 * 255) ** 2, (0.225 * 255) ** 2], )(inp)
     vec = vit(x)
-    model = keras.models.Model(inputs=inp, outputs=vec[0])
+    # vec = dist(vec)
+    # expand dim
+    out = keras.layers.GlobalAveragePooling1D()(vec)
+    model = keras.models.Model(inputs=inp, outputs=out)
     model.summary()
+    # save
+
     return model
 
 
@@ -295,8 +464,8 @@ def apply_quantization_to_dense(layer):
 def SpatialExtractorEfficientFormer() -> keras.Model:
     # Create a new model with the desired layers
 
-    vit = (keras_cv_attention_models.efficientformer.EfficientFormerV2S1(pretrained="imagenet", use_distillation=False))
-    vit.save_weights("efficientformer.h5")
+    vit = keras_cv_attention_models.coat.CoaTLiteMini(pretrained="imagenet", num_classes=0)
+
     for indx, layer in enumerate(vit.layers):
         print(indx, layer.name)
     '''
@@ -314,12 +483,12 @@ def SpatialExtractorEfficientFormer() -> keras.Model:
 
     vit.summary()
     '''
-    vit = model_surgery.convert_gelu_to_approximate(vit)
+    # vit = model_surgery.convert_gelu_to_approximate(vit)
     # vit = model_surgery.prepare_for_tflite(vit)
-    vit = model_surgery.convert_to_fused_conv_bn_model(vit)
+    # vit = model_surgery.convert_to_fused_conv_bn_model(vit)
     # vit = model_surgery.prepare_for_tflite(vit)
-    vit = model_surgery.fuse_channel_affine_to_conv_dense(vit)
-    vit.trainable = False
+    # vit = model_surgery.fuse_channel_affine_to_conv_dense(vit)
+    # vit.trainable = False
     # vit = keras.models.load_model("deit_tiny_distilled_patch16_224")
     # vit = model_surgery.convert_gelu_to_approximate(vit)
     inp = keras.layers.Input(shape=(224, 224, 3))
@@ -334,25 +503,21 @@ def SpatialExtractorEfficientFormer() -> keras.Model:
 def SpatialExtractorFastViT() -> keras.Model:
     # Create a new model with the desired layers
 
-    vit = keras_cv_attention_models.fastvit.FastViT_T12(pretrained="imagenet21k-ft1k", input_shape=(224, 224, 3),
-                                                        deploy=True)
+    vit = keras_cv_attention_models.coat.CoaTLiteMini(pretrained="imagenet", num_classes=0)
     # vit = model_surgery.convert_gelu_to_approximate(vit)
-    model_surgery.count_params(vit)
+    # model_surgery.count_params(vit)
     # model_surgery.fuse_reparam_blocks(vit)
     # vit = keras.models.load_model("deit_tiny_distilled_patch16_224")
     # vit = vit.switch_to_deploy()
-    vit = model_surgery.convert_groups_conv2d_2_split_conv2d(vit)
-    vit = model_surgery.prepare_for_tflite(vit)
-    vit = model_surgery.convert_gelu_to_approximate(vit)
-    vit = model_surgery.convert_to_fused_conv_bn_model(vit)
-    vit = model_surgery.fuse_channel_affine_to_conv_dense(vit)
 
     model_surgery.count_params(vit)
     inp = keras.layers.Input(shape=(224, 224, 3))
-    x = keras.layers.experimental.preprocessing.Rescaling(1. / 255, input_shape=input_shape)(inp)
-    # x = PreprocessTFLayer()(x)
+    x = keras.layers.Normalization(mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
+                                   variance=[(0.229 * 255) ** 2, (0.224 * 255) ** 2, (0.225 * 255) ** 2], )(inp)
+    # x = keras.layers.experimental.preprocessing.Rescaling(1. / 255, input_shape=input_shape)(inp)
     vec = vit(x)
-    model = keras.models.Model(inputs=inp, outputs=vec[0])
+    # vec = keras.layers.GlobalAveragePooling2D()(vec)
+    model = keras.models.Model(inputs=inp, outputs=vec)
     model.summary()
     return model
 
@@ -361,7 +526,7 @@ def SpatialExtractorMobileViT() -> keras.Model:
     inp = keras.layers.Input(shape=(224, 224, 3))
     x = keras.layers.Rescaling(1. / 255)(inp)
     x = PreprocessTFLayer()(x)
-    vit = keras_cv_attention_models.gpvit.GPViT_L1(pretrained="imagenet")
+    vit = keras_cv_attention_models.mobilevit.MobileViT_S(pretrained="imagenet", input_shape=(224, 224, 3))
     # vit = vit.switch_to_deploy()
     # vit = model_surgery.convert_dense_to_conv(vit)
     # vit = model_surgery.convert_gelu_to_approximate(vit)
@@ -453,22 +618,150 @@ def TemporalExtractor3() -> keras.Model:
 
 def TemporalExtractor4() -> keras.Model:
     inp = keras.layers.Input(shape=(16, 192))
-    x = keras.layers.Dense(256, activation='relu', kernel_initializer=tf.keras.initializers.GlorotUniform())(inp)
-    inp2 = keras.layers.Input(shape=(1,))
-    cls_embedding = keras.layers.Embedding(input_dim=1, output_dim=256)(inp2)
+    # x = keras.layers.Dense(256, activation='relu', kernel_initializer=tf.keras.initializers.GlorotUniform())(inp)
+    inp2 = keras.layers.Input(shape=(1, 192))
+    # cls_embedding = keras.layers.Embedding(input_dim=1, output_dim=192)(inp2)
 
-    x = keras.layers.Concatenate(axis=1)([cls_embedding, x])
+    x = keras.layers.Concatenate(axis=1)([inp2, inp])
     # Check the implementation of PositionalEmbedding and ensure it returns the expected shape
     x = PositionalEmbedding()(x)
-
     x = TransformerEncoder(name="transformer_layer")(x)
+    x = TransformerEncoder(name="transformer_layer1")(x)
+
     # remove cls token
     # x = x[:, 1:, :]
     # x = keras.layers.GlobalAvgPool1D()(x)
     # x = x[:, 0, :]
     x = keras.layers.Lambda(lambda a: a[:, 0, :], name="cls_token")(x)
+    # x = keras.layers.Dense(256, activation='relu')(x)
+    # x = keras.layers.Dropout(0.3)(x)
+
+    out = keras.layers.Dense(2, activation='sigmoid')(x)
+    model = keras.models.Model(inputs=[inp2, inp], outputs=out)
+    return model
+
+
+def TemporalExtractor4a() -> keras.Model:
+    inp = keras.layers.Input(shape=(16, 192))
+    inp2 = keras.layers.Input(shape=(1, 192))
+
+    # Concatenate the inputs
+    x = inp
+
+    # LSTM layer
+    x = keras.layers.LSTM(192, return_sequences=True)(x)
+    x = keras.layers.LSTM(192, return_sequences=False)(x)
     x = keras.layers.Dense(256, activation='relu')(x)
     x = keras.layers.Dropout(0.3)(x)
+    x = keras.layers.Dense(256, activation='relu')(x)
+
+    # Output layer
+    out = keras.layers.Dense(2, activation='sigmoid')(x)
+
+    # Define the model
+    model = keras.models.Model(inputs=[inp2, inp], outputs=out)
+    return model
+
+
+LastValueQuantizer = tfmot.quantization.keras.quantizers.LastValueQuantizer
+MovingAverageQuantizer = tfmot.quantization.keras.quantizers.MovingAverageQuantizer
+
+
+class TransformerEncoderQuantizeConfig(tfmot.quantization.keras.QuantizeConfig):
+    # Configure how to quantize weights.
+    def get_weights_and_quantizers(self, layer):
+        if hasattr(layer, 'kernel'):
+            return [(layer.kernel, Log2Quantizer(num_bits=8, symmetric=True,
+                                                 narrow_range=False,
+                                                 per_axis=False))]
+        return []
+
+    # Configure how to quantize activations.
+    def get_activations_and_quantizers(self, layer):
+        return []
+
+    def set_quantize_weights(self, layer, quantize_weights):
+        if quantize_weights:
+            layer.kernel = quantize_weights[0]
+
+    def set_quantize_activations(self, layer, quantize_activations):
+        pass
+
+    # Configure how to quantize outputs (may be equivalent to activations).
+    def get_output_quantizers(self, layer):
+        return []
+
+    def get_config(self):
+        return {}
+
+
+
+class PosEncodingQuantizer(tfmot.quantization.keras.QuantizeConfig):
+    # Configure how to quantize weights.
+    def get_weights_and_quantizers(self, layer):
+        if hasattr(layer, 'kernel'):
+            return [(layer.kernel, tfmot.quantization.keras.quantizers.LastValueQuantizer(num_bits=8, symmetric=True,
+                                                                                          narrow_range=False,
+                                                                                          per_axis=False))]
+        return []
+
+    # Configure how to quantize activations.
+    def get_activations_and_quantizers(self, layer):
+        return []
+
+    def set_quantize_weights(self, layer, quantize_weights):
+        if quantize_weights:
+            layer.kernel = quantize_weights[0]
+
+    def set_quantize_activations(self, layer, quantize_activations):
+        pass
+
+    # Configure how to quantize outputs (may be equivalent to activations).
+    def get_output_quantizers(self, layer):
+        return []
+
+    def get_config(self):
+        return {}
+
+
+class CLSTokenLayer(keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(CLSTokenLayer, self).__init__(**kwargs)
+
+    def call(self, inputs):
+        return inputs[:, 0, :]
+
+    def get_config(self):
+        config = super(CLSTokenLayer, self).get_config()
+        return config
+
+
+def TemporalExtractor5() -> keras.Model:
+    inp = keras.layers.Input(shape=(16, 192))
+    # x = keras.layers.Dense(256, activation='relu', kernel_initializer=tf.keras.initializers.GlorotUniform())(inp)
+    inp2 = keras.layers.Input(shape=(1, 192))
+    # cls_embedding = keras.layers.Embedding(input_dim=1, output_dim=192)(inp2)
+
+    x = keras.layers.Concatenate(axis=1)([inp2, inp])
+    # Check the implementation of PositionalEmbedding and ensure it returns the expected shape
+    pe = tfmot.quantization.keras.quantize_annotate_layer(PositionalEmbedding(),
+                                                          PosEncodingQuantizer())
+    t1 = tfmot.quantization.keras.quantize_annotate_layer(
+        TransformerEncoder(name="transformer_layer"),
+        TransformerEncoderQuantizeConfig())
+    t2 = tfmot.quantization.keras.quantize_annotate_layer(
+        TransformerEncoder(name="transformer_layer1"),
+        TransformerEncoderQuantizeConfig())
+    x = pe(x)
+    x = t1(x)
+    x = t2(x)
+
+    # remove cls token
+    # x = x[:, 1:, :]
+    # x = keras.layers.GlobalAvgPool1D()(x)
+    # x = x[:, 0, :]
+    x = tfmot.quantization.keras.quantize_annotate_layer(CLSTokenLayer(),
+                                                         TransformerEncoderQuantizeConfig())(x)
 
     out = keras.layers.Dense(2, activation='sigmoid')(x)
     model = keras.models.Model(inputs=[inp2, inp], outputs=out)
@@ -510,7 +803,7 @@ class PositionalEmbedding(keras.layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.position_embeddings = keras.layers.Embedding(
-            input_dim=17, output_dim=256
+            input_dim=17, output_dim=192
         )
         self.sinusoidal = SinePositionEncoding()
         self.sequence_length = 17
@@ -613,25 +906,27 @@ class TransformerEncoder(keras.layers.Layer):
         self.embed_dim = 256
         self.dense_dim = 256
         self.attention = keras.layers.MultiHeadAttention(
-            num_heads=8, key_dim=256, dropout=0.3  # was 8, 0.1
+            num_heads=16, key_dim=192, dropout=0.3  # was 8, 0.1
         )
 
         self.dense_proj = keras.Sequential(
-            [keras.layers.Dense(256, activation=tf.nn.relu),
+            [keras.layers.Dense(192, activation=tf.nn.relu6),
+             keras.layers.Dropout(0.3),
 
-             keras.layers.Dense(256, activation=tf.nn.relu),
+             keras.layers.Dense(192),
 
              ]
         )
 
-        self.layernorm_1 = keras.layers.LayerNormalization()
-        self.layernorm_2 = keras.layers.LayerNormalization()
+        self.layernorm_1 = tfmot.quantization.keras.quantize_annotate_layer(keras.layers.LayerNormalization(), TransformerEncoderQuantizeConfig())
+        self.layernorm_2 = tfmot.quantization.keras.quantize_annotate_layer(keras.layers.LayerNormalization(), TransformerEncoderQuantizeConfig())
+
 
     def call(self, inputs, mask=None):
         if mask is not None:
             mask = mask[:, tf.newaxis, :]
-
+        inputs = self.layernorm_1(inputs)
         attention_output = self.attention(inputs, inputs, attention_mask=mask)
-        proj_input = self.layernorm_1(inputs + attention_output)
+        proj_input = self.layernorm_2(inputs + attention_output)
         proj_output = self.dense_proj(proj_input)
         return proj_output + proj_input

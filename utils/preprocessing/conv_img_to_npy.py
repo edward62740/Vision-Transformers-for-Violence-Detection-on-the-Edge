@@ -28,7 +28,7 @@ from keras_cv_attention_models import efficientvit_b
 
 import os
 
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 SEED = 42
 DATASET_DIR = PROJ_DIR + r'\ucf_dataset_proc5'
 OUTPUT_DIR = PROJ_DIR + r'\npy_data_output_5'

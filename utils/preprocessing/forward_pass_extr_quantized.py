@@ -37,7 +37,7 @@ import os
 from model import SpatialExtractor, TemporalExtractor, SpatialExtractorTest
 from model_baseline import SpatialBaseline
 
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 
 NUMPY_ARRAY_DIR = PROJ_DIR + r'\npy_data_output_15'
 OUTPUT_DIR = PROJ_DIR + r'\output_features15_main_quantized'

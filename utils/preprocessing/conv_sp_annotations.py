@@ -9,7 +9,7 @@ import os
 from itertools import groupby
 from operator import itemgetter
 
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 
 import os
 

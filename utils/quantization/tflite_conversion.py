@@ -16,7 +16,7 @@ import keras_cv_attention_models
 from keras_cv_attention_models.model_surgery import model_surgery
 from model import PositionalEmbedding, TransformerEncoder, SpatialExtractorDeiT, SpatialExtractorEfficientFormer, SpatialExtractorFastViT
 
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 
 NUMPY_ARRAY_DIR = PROJ_DIR + r'\npy_data_output_15'
 BATCH_SIZE = 16

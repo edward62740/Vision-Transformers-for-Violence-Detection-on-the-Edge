@@ -9,7 +9,7 @@ from PIL import Image
 
 import cv2
 
-PROJ_PATH = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_PATH = r""
 
 train_video_folder = PROJ_PATH + '/ucf_dataset'
 train_frame_folder = PROJ_PATH + '/ucf_dataset_proc5'

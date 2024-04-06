@@ -10,7 +10,7 @@ from keras_cv_attention_models import model_surgery
 from tensorflow import keras
 from model import SpatialExtractor, PositionalEmbedding, TransformerEncoder, TemporalExtractor4, TemporalExtractor3
 
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 model = TemporalExtractor4()
 #model.summary()
 model.load_weights('cls.h5')

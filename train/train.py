@@ -31,7 +31,7 @@ from model import TemporalExtractor2, TemporalExtractor3, TemporalExtractor, Tem
 
 import os
 
-PROJ_DIR = r"C:\Users\Workstation\Documents\GitHub\URECA-Project"
+PROJ_DIR = r""
 OUT_DIR = PROJ_DIR + r"\vit15train"
 DATASET_DIR = PROJ_DIR + r'\ucf_dataset_proc'
 BATCH_SIZE = 16
