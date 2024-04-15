@@ -15,3 +15,9 @@ The table below provides an overview of the codes used.
 | utils  | Preprocessing, QAT, PTQ, image processing algorithms |
 
 This project was completed under NTU's URECA programme. Refer to this [link]() for the paper.
+
+The proposed modifications in section 2.1.1 - 2.1.4 are found in models/deit.py and constructed with models/reconstruct_deit.py.<br>
+The TFlite model (and the one compiled for TPU) is in models/deit+transformer.<br>
+The UCF-crime dataset is available [here](https://www.crcv.ucf.edu/projects/real-world/).<br>
+
+
