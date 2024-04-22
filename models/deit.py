@@ -1,5 +1,6 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+# Modified DeiT code to compile on Edge TPU.
 
 from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Type, Union, List
 try:

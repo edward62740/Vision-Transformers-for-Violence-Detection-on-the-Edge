@@ -6,13 +6,13 @@ Various pre-trained ViTs and hybrid ViTs are used as backbone, yielding on avera
 Additionally, this project also aims to deploy the violence detection model onto the Google Edge TPU. As such, this work proposed various techniques to modify the ViT graph structure for execution on TPU.<br>
 Due to limitations on quantization schemes for hybrid ViTs, the DeiT model was used for deployment on TPU.<br>
 
-The table below provides an overview of the codes used.
+The table below provides an overview of the codes used. Each subdirectory contains a README to describe the usage.
 | Folder | Description                                          |
 |--------|------------------------------------------------------|
-| models | Tflite/torch model definitions and trained weights   |
-| test   | Testing code for measuring accuracy etc.             |
-| train  | Training code                                        |
-| utils  | Preprocessing, QAT, PTQ, image processing algorithms |
+| [models](https://github.com/edward62740/Vision-Transformers-for-Violence-Detection-on-the-Edge/tree/main/models) | Tflite/torch model definitions and trained weights   |
+| [test](https://github.com/edward62740/Vision-Transformers-for-Violence-Detection-on-the-Edge/tree/main/test)   | Testing code for measuring accuracy etc.             |
+| [train](https://github.com/edward62740/Vision-Transformers-for-Violence-Detection-on-the-Edge/tree/main/train)  | Training code                                        |
+| [utils](https://github.com/edward62740/Vision-Transformers-for-Violence-Detection-on-the-Edge/tree/main/utils)  | Preprocessing, QAT, PTQ, image processing algorithms |
 
 This project was completed under NTU's URECA programme. Refer to this [link]() for the paper.
 
